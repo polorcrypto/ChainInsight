@@ -1,0 +1,99 @@
+from web3 import Web3
+import requests
+import pandas as pd
+import matplotlib.pyplot as plt
+from datetime import datetime
+
+class ChainInsight:
+    def __init__(self, eth_infura_url: str, btc_api_url: str = 'https://api.blockcypher.com/v1/btc/main'):
+        self.web3 = Web3(Web3.HTTPProvider(eth_infura_url))
+        if not self.web3.isConnected():
+            raise Exception("Failed to connect to the Ethereum node")
+        self.btc_api_url = btc_api_url
+
+    # Ethereum methods
+    def get_eth_block(self, block_number: int) -> dict:
+        return self.web3.eth.getBlock(block_number, full_transactions=True)
+
+    def get_eth_transaction_data(self, transaction_hash: str) -> dict:
+        return self.web3.eth.getTransaction(transaction_hash)
+
+    def get_eth_block_data(self, block_number: int) -> dict:
+        block = self.get_eth_block(block_number)
+        transactions = block['transactions']
+        return {
+            'block_number': block_number,
+            'transaction_count': len(transactions),
+            'timestamp': datetime.utcfromtimestamp(block['timestamp']).strftime('%Y-%m-%d %H:%M:%S')
+        }
+
+    # Bitcoin methods
+    def get_btc_block(self, block_hash: str) -> dict:
+        response = requests.get(f"{self.btc_api_url}/blocks/{block_hash}")
+        if response.status_code == 200:
+            return response.json()
+        else:
+            return {"error": "Failed to fetch block data"}
+
+    def get_btc_block_data(self, block_hash: str) -> dict:
+        block = self.get_btc_block(block_hash)
+        if 'error' in block:
+            return block
+
+        return {
+            'block_hash': block_hash,
+            'transaction_count': len(block.get('tx', [])),
+            'time': datetime.utcfromtimestamp(block.get('time', 0)).strftime('%Y-%m-%d %H:%M:%S')
+        }
+
+    # Visualizations
+    def visualize_eth_blocks(self, start_block: int, end_block: int):
+        block_numbers = range(start_block, end_block + 1)
+        transaction_counts = []
+
+        for block_number in block_numbers:
+            block_data = self.get_eth_block_data(block_number)
+            transaction_counts.append(block_data['transaction_count'])
+
+        plt.figure(figsize=(12, 6))
+        plt.plot(block_numbers, transaction_counts, marker='o')
+        plt.title(f'Ethereum Transactions per Block ({start_block} to {end_block})')
+        plt.xlabel('Block Number')
+        plt.ylabel('Transaction Count')
+        plt.grid(True)
+        plt.show()
+
+    def visualize_btc_blocks(self, block_hashes: list):
+        block_hashes = block_hashes[:10]  # Limit to the first 10 blocks for simplicity
+        transaction_counts = []
+
+        for block_hash in block_hashes:
+            block_data = self.get_btc_block_data(block_hash)
+            if 'error' not in block_data:
+                transaction_counts.append(block_data['transaction_count'])
+        
+        plt.figure(figsize=(12, 6))
+        plt.bar(block_hashes, transaction_counts)
+        plt.title('Bitcoin Transaction Counts per Block')
+        plt.xlabel('Block Hash')
+        plt.ylabel('Transaction Count')
+        plt.xticks(rotation=45)
+        plt.grid(True)
+        plt.show()
+
+# Example Usage
+if __name__ == "__main__":
+    ETH_INFURA_URL = 'https://mainnet.infura.io/v3/YOUR_INFURA_PROJECT_ID'
+    BTC_BLOCK_HASHES = [
+        '0000000000000000000b7d8fd8ef7e1d6749a8f41fd9b63d8c1d03b67e35e7e4',
+        '0000000000000000000f4f57b65a3a1d1c8c4c3c9f5d2e4d0e024f832e434c4',
+        # Add more block hashes as needed
+    ]
+    
+    chain_insight = ChainInsight(ETH_INFURA_URL)
+
+    # Visualize Ethereum Blocks
+    chain_insight.visualize_eth_blocks(start_block=10000000, end_block=10000010)
+
+    # Visualize Bitcoin Blocks
+    chain_insight.visualize_btc_blocks(BTC_BLOCK_HASHES)
